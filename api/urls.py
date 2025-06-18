@@ -1,6 +1,6 @@
 from django.urls import path
 from drf_spectacular.views import SpectacularAPIView, SpectacularSwaggerView, SpectacularRedocView
-from rest_framework_simplejwt.views import TokenObtainPairView, TokenRefreshView
+from rest_framework.authtoken.views import obtain_auth_token
 
 from .views import (
     recommend_recipes,
@@ -14,8 +14,7 @@ from .views import (
 
 urlpatterns = [
     path('api/recommend/', recommend_recipes, name='recommend_recipes'),
-    path('api/token/', TokenObtainPairView.as_view(), name='token_obtain_pair'),
-    path('api/token/refresh/', TokenRefreshView.as_view(), name='token_refresh'),
+    path('api/token/', obtain_auth_token),
     path('api/register/', RegisterView.as_view(), name='register'),
     path('recipes/<int:pk>/', RecipeDetailView.as_view(), name='recipe-detail'),
     path('api/favourites/', FavouriteRecipeListCreateView.as_view(), name='favourite-list-create'),
