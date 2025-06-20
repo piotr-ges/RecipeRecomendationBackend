@@ -8,12 +8,14 @@ from .views import (
     FavouriteRecipeListCreateView,
     RecipeDetailView,
     FavouriteRecipeDeleteView,
-    FavouriteRecipeDetailView
+    FavouriteRecipeDetailView,
+    process_image
 )
 
 
 urlpatterns = [
     path('api/recommend/', recommend_recipes, name='recommend_recipes'),
+    path('api/process-image/', process_image, name='process_image'),
     path('api/token/', obtain_auth_token),
     path('api/register/', RegisterView.as_view(), name='register'),
     path('recipes/<int:pk>/', RecipeDetailView.as_view(), name='recipe-detail'),
