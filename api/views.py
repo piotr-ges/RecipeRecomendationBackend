@@ -83,7 +83,7 @@ def recommend_recipes(request):
     # sortujemy po liczbie dopasowań
     recommendations.sort(key=lambda x: (-x['match_percentage'], x['total_ingredients']))
 
-    return Response(recommendations[:10])  # Top 10 przepisów
+    return Response(recommendations[:10], status = status.HTTP_200_OK)  # Top 10 przepisów
 
 
 @extend_schema(
@@ -102,15 +102,29 @@ def recommend_recipes(request):
             'properties': {
                 'ingredients': {
                     'type': 'array',
-                    'items': {'type': 'string'},
-                    'example': ['cheese', 'tomato', 'basil']
+                    'items': {
+                        'type': 'object',
+                        'properties': {
+                            'label': {'type': 'string'},
+                            'confidence': {'type': 'number'},
+                            'box': {
+                                'type': 'array',
+                                'items': {'type': 'number'},
+                                'description': '[x1, y1, x2, y2]'
+                            }
+                        }
+                    },
+                    'example': [
+                        {'label': 'cheese', 'confidence': 0.95, 'box': [100, 150, 200, 250]},
+                        {'label': 'tomato', 'confidence': 0.87, 'box': [250, 300, 320, 370]}
+                    ]
                 }
             }
         },
         400: {'type': 'object', 'properties': {'error': {'type': 'string'}}}
     },
     methods=["POST"],
-    description="Przetwarza zdjęcie i zwraca listę wykrytych składników."
+    description="Przetwarza zdjęcie i zwraca listę wykrytych składników z bounding boxami."
 )
 @api_view(['POST'])
 @permission_classes([IsAuthenticated])
@@ -121,26 +135,20 @@ def process_image(request):
     if not image_file:
         return Response({"error": "Image is required"}, status=status.HTTP_400_BAD_REQUEST)
 
-    def process_image_to_ingredients(image_file):
-        image = Image.open(image_file)
+    image = Image.open(image_file)
+    results = model.predict(image)[0]
 
-        # Przetwarzanie modelem YOLO
-        results = model.predict(image)
-
-        # Zbierz unikalne etykiety
-        detected_labels = set()
-        for result in results:
-            if result.boxes is not None:
-                for cls_id in result.boxes.cls:
-                    label = result.names[int(cls_id)]
-                    detected_labels.add(label)
-
-        return list(detected_labels)
-
-    ingredients = process_image_to_ingredients(image_file)
-
-    if not ingredients:
+    if results.boxes is None or len(results.boxes) == 0:
         return Response({"error": "No ingredients detected"}, status=status.HTTP_400_BAD_REQUEST)
+
+    ingredients = []
+    for box, cls, conf in zip(results.boxes.xyxy, results.boxes.cls, results.boxes.conf):
+        label = results.names[int(cls)]
+        ingredients.append({
+            "label": label,
+            "confidence": round(float(conf), 3),
+            "box": [round(float(coord), 2) for coord in box]
+        })
 
     return Response({"ingredients": ingredients}, status=status.HTTP_200_OK)
 
