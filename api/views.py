@@ -1,9 +1,12 @@
 from PIL import Image
 from django.db.models import Q
 from django.shortcuts import render
+from django.views.decorators.csrf import csrf_exempt
 from rest_framework import generics, permissions, status
 from rest_framework.decorators import api_view, permission_classes, parser_classes
+from rest_framework.exceptions import ValidationError
 from rest_framework.generics import RetrieveAPIView
+from rest_framework.pagination import PageNumberPagination
 from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
@@ -13,14 +16,14 @@ import json
 from django.contrib.auth.models import User
 
 from .serializers import RegisterSerializer, FavouriteRecipeSerializer, RecipeSerializer, RecipeSummarySerializer, \
-    FavouriteRecipeSummarySerializer
+    FavouriteRecipeSummarySerializer, PaginatedRecipeMatchSerializer
 
 from drf_spectacular.utils import extend_schema, OpenApiParameter, OpenApiExample, OpenApiTypes
 from rest_framework.parsers import MultiPartParser
 from ultralytics import YOLO
 
 
-model = YOLO('api/yolo11v05.pt')
+model = YOLO('api/best.pt')
 
 @extend_schema(
     request={
@@ -39,6 +42,7 @@ model = YOLO('api/yolo11v05.pt')
     methods=["POST"],
     description="Zwraca rekomendacje przepisów na podstawie listy składników."
 )
+@csrf_exempt
 @api_view(['POST'])
 @permission_classes([IsAuthenticated])
 def recommend_recipes(request):
@@ -50,9 +54,10 @@ def recommend_recipes(request):
     user_ingredients_set = set(user_ingredients)
 
     query = Q()
-    for ingredient in user_ingredients:
-        query |= Q(ner__contains=[ingredient])
-    recipes = Recipe.objects.filter(query)
+    for ing in user_ingredients:
+        query |= Q(ner__icontains=ing)
+
+    recipes = Recipe.objects.filter(query).only('id', 'title', 'link', 'ner')
 
     recommendations = []
 
@@ -80,10 +85,9 @@ def recommend_recipes(request):
                 "link": recipe.link
             })
 
-    # sortujemy po liczbie dopasowań
-    recommendations.sort(key=lambda x: (-x['match_percentage'], x['total_ingredients']))
+    recommendations.sort(key=lambda x: (-x['match_percentage'], -x['match_count']))
 
-    return Response(recommendations[:10], status = status.HTTP_200_OK)  # Top 10 przepisów
+    return Response(recommendations[:100], status=status.HTTP_200_OK)
 
 
 @extend_schema(
@@ -168,14 +172,19 @@ class FavouriteRecipeListCreateView(generics.ListCreateAPIView):
 
     def get_serializer_class(self):
         if self.request.method == 'GET':
-            # Dla listy ulubionych (GET) - użyj "lekkiego" serializera
             return FavouriteRecipeSummarySerializer
         else:
-            # Dla POST (tworzenia) lub innych - pełny serializer
             return FavouriteRecipeSerializer
 
     def perform_create(self, serializer):
-        serializer.save(user=self.request.user)
+        user = self.request.user
+        recipe = serializer.validated_data.get('recipe')
+
+        # Sprawdzenie, czy przepis już jest w ulubionych
+        if FavouriteRecipe.objects.filter(user=user, recipe=recipe).exists():
+            raise ValidationError({"detail": "Recipe is already in favourites."})
+
+        serializer.save(user=user)
 
 
 class RecipeDetailView(APIView):

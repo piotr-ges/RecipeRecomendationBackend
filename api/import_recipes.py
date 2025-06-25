@@ -15,7 +15,7 @@ def import_recipes_from_csv(csv_file_path):
                 ner = ast.literal_eval(row['NER'])
 
                 Recipe.objects.create(
-                    title=row['title'][:255],  # ogranicz długość, jeśli pole jest krótsze
+                    title=row['title'][:255],
                     ingredients=ingredients,
                     directions=directions,
                     link=row['link'],

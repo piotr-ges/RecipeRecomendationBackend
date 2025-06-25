@@ -40,8 +40,24 @@ class RecipeSummarySerializer(serializers.ModelSerializer):
 
 
 class FavouriteRecipeSummarySerializer(serializers.ModelSerializer):
-    recipe = RecipeSummarySerializer(read_only=True)  # tutaj skrócony serializer przepisu
+    recipe = RecipeSummarySerializer(read_only=True)
 
     class Meta:
         model = FavouriteRecipe
         fields = ['id', 'recipe']
+
+
+class RecipeMatchSerializer(RecipeSummarySerializer):
+    match_count = serializers.IntegerField()
+    total_ingredients = serializers.IntegerField()
+    match_percentage = serializers.FloatField()
+
+    class Meta(RecipeSummarySerializer.Meta):
+        fields = RecipeSummarySerializer.Meta.fields + ['match_count', 'total_ingredients', 'match_percentage']
+
+
+class PaginatedRecipeMatchSerializer(serializers.Serializer):
+    count = serializers.IntegerField()
+    next = serializers.CharField(allow_null=True)
+    previous = serializers.CharField(allow_null=True)
+    results = RecipeMatchSerializer(many=True)
